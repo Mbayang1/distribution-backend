@@ -2,46 +2,102 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 
-// Get all distributions
+// 🔍 Get all distributions
 router.get('/', (req, res) => {
-  db.query('SELECT * FROM distributions', (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
+  const query = `
+    SELECT 
+      dist.id,
+      dist.agent,
+      dist.material,
+      dist.department,
+      dist.service,
+      a.prenom, 
+      a.nom, 
+      a.telephone,
+      m.name AS material_name, 
+      m.description, 
+      dist.quantity,
+      dept.name AS department_name,
+      s.name AS service_name,
+      DATE_FORMAT(dist.assigned_date, '%Y-%m-%d') AS assigned_date,
+      dist.notes,
+      t.name AS type_name,
+      dist.date_return,
+      dist.commentaire
+    FROM distributions dist
+    LEFT JOIN agents a ON dist.agent = a.agent_ID
+    LEFT JOIN materials m ON dist.material = m.material_ID
+    LEFT JOIN type_of_materials t ON t.type_ID = m.type
+    LEFT JOIN departments dept ON dist.department = dept.department_ID
+    LEFT JOIN services s ON dist.service = s.service_ID
+    WHERE dist.statut = 1;
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error fetching distributions:', err);
+      return res.status(500).json({ error: 'Failed to retrieve distributions' });
+    }
     res.json(results);
   });
 });
 
-// Get a single distribution by ID
-router.get('/:id', (req, res) => {
-  db.query('SELECT * FROM distributions WHERE id = ?', [req.params.id], (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (results.length === 0) return res.status(404).json({ error: 'Department not found' });
-    res.json(results[0]);
-  });
-});
-
-// Add a new distribution
+// ➕ Add a new distribution
 router.post('/', (req, res) => {
-  const { name } = req.body;
-  db.query('INSERT INTO distributions (name) VALUES (?)', [name], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: result.insertId, name });
+  let { agent, material, department, service, assigned_date, notes, quantity } = req.body;
+
+  if (!agent) agent = null;
+  if (!department) department = null;
+  if (!service) service = null;
+
+  const query = `
+    INSERT INTO distributions (agent, material, department, service, assigned_date, notes, quantity)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+  db.query(query, [agent, material, department, service, assigned_date, notes, quantity], (err, result) => {
+    if (err) {
+      console.error('Error adding distribution:', err);
+      return res.status(500).json({ error: 'Failed to add distribution' });
+    }
+    res.status(201).json({ id: result.insertId, agent, material, department, service, assigned_date, notes });
   });
 });
 
-// Update a distribution
-router.put('/:id', (req, res) => {
-  const { name } = req.body;
-  db.query('UPDATE distributions SET name = ? WHERE id = ?', [name, req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Distribution updated' });
+
+
+// ✏️ Update distribution
+router.put('/updateDistribution', (req, res) => {
+  let { id, agent, material, department, service, assigned_date, notes, quantity,commentaire,date_return } = req.body;
+
+  if (!agent || agent === 'null') agent = null;
+  if (!department || department === 'null') department = null;
+  if (!service || service === 'null') service = null;
+
+  const query = `
+    UPDATE distributions
+    SET agent = ?, material = ?, department = ?, service = ?, assigned_date = ?, notes = ?, quantity = ?, date_return =?,commentaire= ? WHERE id = ?
+  `;
+  db.query(query, [agent, material, department, service, assigned_date, notes, quantity,date_return,commentaire, id], (err, result) => {
+    if (err) {
+      console.error('Update failed:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Distribution not found' });
+    }
+    res.json({ message: 'Distribution updated successfully' });
   });
 });
 
-// Delete a distribution
+// 🗑️ Soft delete
 router.delete('/:id', (req, res) => {
-  db.query('DELETE FROM distributions WHERE id = ?', [req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Distribution deleted' });
+  const { id } = req.params;
+  db.query('UPDATE distributions SET statut = 0 WHERE id = ?', [id], (err) => {
+    if (err) {
+      console.error(`Error deleting distribution ${id}:`, err);
+      return res.status(500).json({ error: 'Failed to delete distribution' });
+    }
+    res.json({ message: 'Distribution deleted successfully' });
   });
 });
 

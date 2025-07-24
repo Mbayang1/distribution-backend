@@ -2,46 +2,65 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 
-// Get all departments
+// 🟢 GET all departments
 router.get('/', (req, res) => {
-  db.query('SELECT * FROM departments', (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
+  db.query('SELECT * FROM departments where statut=1', (err, results) => {
+    if (err) {
+      console.error('Error fetching departments:', err);
+      return res.status(500).json({ error: 'Failed to retrieve departments' });
+    }
     res.json(results);
   });
 });
 
-// Get a single department by ID
-router.get('/:id', (req, res) => {
-  db.query('SELECT * FROM departments WHERE id = ?', [req.params.id], (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (results.length === 0) return res.status(404).json({ error: 'Department not found' });
-    res.json(results[0]);
-  });
-});
-
-// Add a new department
+// ➕ Add a new department
 router.post('/', (req, res) => {
-  const { name } = req.body;
-  db.query('INSERT INTO departments (name) VALUES (?)', [name], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: result.insertId, name });
+  const { name,description } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Department name is required' });
+  }
+
+  const query = 'INSERT INTO departments (name,description) VALUES (?,?)';
+  db.query(query, [name,description], (err, result) => {
+    if (err) {
+      console.error('Error adding department:', err);
+      return res.status(500).json({ error: 'Failed to add department' });
+    }
+
+    res.status(201).json({ department_ID: result.insertId, name });
   });
 });
 
-// Update a department
-router.put('/:id', (req, res) => {
-  const { name } = req.body;
-  db.query('UPDATE departments SET name = ? WHERE id = ?', [name, req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Department updated' });
+// ✏️ Update an existing department
+router.put('/updateDepartement', (req, res) => {
+  const { department_ID, name,description} = req.body;
+
+  const query = 'UPDATE departments SET name = ? ,description=? WHERE department_ID = ?';
+  db.query(query, [ name,description,department_ID], (err, result) => {
+    if (err) {
+      console.error('Update failed:', err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+
+    res.json({ message: 'Department updated successfully' });
   });
 });
 
-// Delete a department
+
+// 🗑️ Delete a department
 router.delete('/:id', (req, res) => {
-  db.query('DELETE FROM departments WHERE id = ?', [req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Department deleted' });
+  const { id } = req.params;
+  db.query('update departments set statut=0 WHERE department_ID = ?', [id], (err, result) => {
+    if (err) {
+      console.error(`❌ Error deleting department ${id}:`, err);
+      return res.status(500).json({ error: 'Failed to delete department' });
+    }
+
+    res.json({ message: 'Department deleted successfully' });
   });
 });
 

@@ -2,47 +2,81 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 
-// Get all services
+// 🟢 GET all services with department names
 router.get('/', (req, res) => {
-  db.query('SELECT * FROM services', (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
+  const query = `
+    SELECT 
+      s.service_ID,
+      s.name ,
+      s.department AS department_ID,
+      d.name AS department_name
+    FROM services s
+    LEFT JOIN departments d ON s.department = d.department_ID where s.statut=1 and d.statut=1
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error fetching services with departments:', err);
+      return res.status(500).json({ error: 'Failed to retrieve services' });
+    }
     res.json(results);
   });
 });
 
-// Get a single service by ID
-router.get('/:id', (req, res) => {
-  db.query('SELECT * FROM services WHERE id = ?', [req.params.id], (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (results.length === 0) return res.status(404).json({ error: 'Service not found' });
-    res.json(results[0]);
-  });
-});
-
-// Add a new service
+// ➕ Add a new service with department validation
 router.post('/', (req, res) => {
-  const { name } = req.body; // Adjust field names as needed
-  db.query('INSERT INTO services (name) VALUES (?)', [name], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: result.insertId, name });
-  });
-});
+  const { name, department } = req.body;
+  if (!name || !department) {
+    return res.status(400).json({ error: 'Service name and department ID are required' });
+  }
 
-// Update a service
-router.put('/:id', (req, res) => {
-  const { name } = req.body; // Adjust field names as needed
-  db.query('UPDATE services SET name = ? WHERE id = ?', [name, req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Service updated' });
-  });
-});
+   
 
-// Delete a service
+    const query = 'INSERT INTO services (name, department) VALUES (?, ?)';
+    db.query(query, [name, department], (err, result) => {
+      if (err) {
+        console.error('Error adding service:', err);
+        return res.status(500).json({ error: 'Failed to add service' });
+      }
+
+      res.status(201).json({ service_ID: result.insertId, name });
+    });
+  });
+
+
+// ✏️ Update an existing service with department validation
+router.put('/updateService', (req, res) => {
+  const { service_ID, name, department } = req.body;
+  if (!service_ID || !name || !department) {
+    return res.status(400).json({ error: 'All fields are required for update' });
+  }
+
+    const query = 'UPDATE services SET name = ?, department = ? WHERE service_ID = ?';
+    db.query(query, [name, department, service_ID], (err, result) => {
+      if (err) {
+        console.error('Update failed:', err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Service not found' });
+      }
+
+      res.json({ message: 'Service updated successfully' });
+    });
+  });
+
+
+// 🗑️ Delete a service
 router.delete('/:id', (req, res) => {
-  db.query('DELETE FROM services WHERE id = ?', [req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Service deleted' });
+  const { id } = req.params;
+  db.query('update  services set statut=0 WHERE service_ID = ?', [id], (err, result) => {
+    if (err) {
+      console.error(`❌ Error deleting services ${id}:`, err);
+      return res.status(500).json({ error: 'Failed to delete department' });
+    }
+
+    res.json({ message: 'services deleted successfully' });
   });
 });
-
 module.exports = router;
